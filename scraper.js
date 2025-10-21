@@ -3,12 +3,21 @@ import { chromium } from "playwright";
 export async function scrapeTokenData(tokenUrl) {
   const startTime = Date.now();
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--disable-gpu",
+    ],
+  });
+
   const context = await browser.newContext();
   const page = await context.newPage();
 
   await page.goto(tokenUrl, { waitUntil: "networkidle" });
-
   await page.waitForSelector("img.object-cover");
 
   const bannerEl = await page.$("img.object-cover");
@@ -24,7 +33,9 @@ export async function scrapeTokenData(tokenUrl) {
   const tokenTicker = tickerEl ? (await tickerEl.textContent()).trim() : null;
 
   const marketCapEl = await page.$('[data-testid="market-cap-value"]');
-  const marketCap = marketCapEl ? (await marketCapEl.textContent()).trim() : null;
+  const marketCap = marketCapEl
+    ? (await marketCapEl.textContent()).trim()
+    : null;
 
   const athEl = await page.$('[data-testid="ath-value"]');
   const ath = athEl ? (await athEl.textContent()).trim() : null;
@@ -33,7 +44,9 @@ export async function scrapeTokenData(tokenUrl) {
   const volume24h = volumeEl ? (await volumeEl.textContent()).trim() : null;
 
   const descEl = await page.$("div.break-anywhere.max-w-full.break-words");
-  const tokenDescription = descEl ? (await descEl.innerText()).trim() : null;
+  const tokenDescription = descEl
+    ? (await descEl.innerText()).trim()
+    : null;
 
   const socialsContainer = await page.$(
     "div.order-1.flex.flex-col.justify-between.space-y-2.md\\:mb-3.lg\\:flex-row"
