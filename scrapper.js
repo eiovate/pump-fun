@@ -1,23 +1,52 @@
 import { chromium } from "playwright";
 
-export async function scrapeTokenData(tokenUrl) {
+let browser;
+let page;
+
+export async function initBrowser() {
+  if (!browser) {
+    browser = await chromium.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas",
+        "--disable-gpu",
+      ],
+    });
+  }
+
+  if (!page) {
+    const context = await browser.newContext();
+    page = await context.newPage();
+
+    // Block images/styles/fonts to speed up loading
+    await page.route('**/*', route => {
+      const resourceType = route.request().resourceType();
+      if (['image', 'stylesheet', 'font'].includes(resourceType)) {
+        route.abort();
+      } else {
+        route.continue();
+      }
+    });
+
+    // Navigate once during init
+    await page.goto("https://pump.fun/coin/23yCGPFWA8rf2uQpBgY3xq3fenJni5GsWSic9qsZy28x", { waitUntil: "networkidle" });
+  }
+}
+
+export async function scrapeTokenData() {
+  if (!page) {
+    await initBrowser();
+  }
+
   const startTime = Date.now();
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
-      "--disable-gpu",
-    ],
-  });
+  // Reload page or use page.reload() if you want fresh data on each scrape
+  await page.reload({ waitUntil: "networkidle" });
 
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
-  await page.goto(tokenUrl, { waitUntil: "networkidle" });
+  // Then do your scraping as usual
   await page.waitForSelector("img.object-cover");
 
   const bannerEl = await page.$("img.object-cover");
@@ -33,9 +62,7 @@ export async function scrapeTokenData(tokenUrl) {
   const tokenTicker = tickerEl ? (await tickerEl.textContent()).trim() : null;
 
   const marketCapEl = await page.$('[data-testid="market-cap-value"]');
-  const marketCap = marketCapEl
-    ? (await marketCapEl.textContent()).trim()
-    : null;
+  const marketCap = marketCapEl ? (await marketCapEl.textContent()).trim() : null;
 
   const athEl = await page.$('[data-testid="ath-value"]');
   const ath = athEl ? (await athEl.textContent()).trim() : null;
@@ -44,9 +71,7 @@ export async function scrapeTokenData(tokenUrl) {
   const volume24h = volumeEl ? (await volumeEl.textContent()).trim() : null;
 
   const descEl = await page.$("div.break-anywhere.max-w-full.break-words");
-  const tokenDescription = descEl
-    ? (await descEl.innerText()).trim()
-    : null;
+  const tokenDescription = descEl ? (await descEl.innerText()).trim() : null;
 
   const socialsContainer = await page.$(
     "div.order-1.flex.flex-col.justify-between.space-y-2.md\\:mb-3.lg\\:flex-row"
@@ -67,8 +92,6 @@ export async function scrapeTokenData(tokenUrl) {
     }
   }
 
-  await browser.close();
-
   const endTime = Date.now();
 
   return {
@@ -83,4 +106,13 @@ export async function scrapeTokenData(tokenUrl) {
     socialLinks,
     scrapeTimeSeconds: (endTime - startTime) / 1000,
   };
+}
+
+// Optional: graceful shutdown function to close browser
+export async function closeBrowser() {
+  if (browser) {
+    await browser.close();
+    browser = null;
+    page = null;
+  }
 }

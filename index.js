@@ -1,5 +1,7 @@
+console.log("🚀 Server file loaded");
+
 import express from "express";
-import { scrapeTokenData } from "./scraper.js";
+import { scrapeTokenData, initBrowser, closeBrowser } from "./scraper.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -7,7 +9,18 @@ const PORT = process.env.PORT || 3000;
 let cache = { data: null, timestamp: 0 };
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-const tokenUrl = "https://pump.fun/coin/23yCGPFWA8rf2uQpBgY3xq3fenJni5GsWSic9qsZy28x";
+// Initialize browser and page once on server start
+(async () => {
+  try {
+    await initBrowser();
+    app.listen(PORT, () => {
+      console.log(`🚀 Server listening on http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error("Failed to initialize browser:", err);
+    process.exit(1);
+  }
+})();
 
 // Root route
 app.get("/", (req, res) => {
@@ -40,7 +53,7 @@ app.get("/api/tokenomics", async (req, res) => {
   }
 
   try {
-    const data = await scrapeTokenData(tokenUrl);
+    const data = await scrapeTokenData();
     cache = { data, timestamp: now };
     res.json({
       source: "fresh",
@@ -61,7 +74,9 @@ app.use((req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server listening on http://localhost:${PORT}`);
+// Optional graceful shutdown of browser on app termination
+process.on("SIGINT", async () => {
+  console.log("🛑 Closing browser and exiting...");
+  await closeBrowser();
+  process.exit();
 });
